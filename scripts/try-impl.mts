@@ -1,0 +1,17 @@
+import { createProject, createRound, createRun } from "../src/lib/repo.ts";
+import { runImplReview } from "../src/lib/review/impl.ts";
+import { getDb } from "../src/lib/db.ts";
+import { readFileSync } from "node:fs";
+const base = readFileSync(".env", "utf8").match(/TARGET_BASE_URL=(.*)/)![1].trim();
+const pid = createProject({ name: "임시-구현검수테스트", site_url: base, env: "dev", figma_links: [process.argv[3] ?? ""] });
+const rid = createRound({ project_id: pid, name: "1차", mode: "impl" });
+const runId = createRun(rid, process.argv[2] ?? "MYP-SITE-01");
+const t = setInterval(() => { const r = getDb().prepare("SELECT progress FROM runs WHERE id=?").get(runId) as any; console.log("..", r.progress); }, 8000);
+await runImplReview(runId);
+clearInterval(t);
+const db = getDb();
+console.log(db.prepare("SELECT status, error, cost_usd, done, total FROM runs WHERE id=?").get(runId));
+console.log("mappings", db.prepare("SELECT screen_key, url, confidence, reason FROM mappings WHERE project_id=?").all(pid));
+for (const f of db.prepare("SELECT screen_id,type,severity,source,confidence,title,expected,actual FROM findings WHERE run_id=?").all(runId) as any[]) console.log("-", f.type, f.severity, f.source, f.confidence, "|", f.title, "|| 기획:", String(f.expected).slice(0, 70), "|| 사이트:", String(f.actual).slice(0, 90));
+for (const q of db.prepare("SELECT question FROM questions WHERE run_id=?").all(runId) as any[]) console.log("Q", q.question);
+console.log("PID", pid);
